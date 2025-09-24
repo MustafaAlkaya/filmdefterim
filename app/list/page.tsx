@@ -5,6 +5,38 @@ import type { ListItem } from "@/types/list-item";
 import type { ChangeEvent } from "react";
 import { toast } from "@/lib/toast";
 
+// İlk 2 türü tam göster, kalanı +N; ilk tür asla kaybolmaz
+function GenresChips({ genres }: { genres: string[] }) {
+  if (!genres || genres.length === 0) return null;
+  const shown = genres.slice(0, 2);
+  const hidden = genres.slice(2);
+  return (
+    <div className="min-w-0 flex items-center gap-1">
+      {shown.map((g, i) => (
+        <span
+          key={g}
+          title={g}
+          className={[
+            "rounded-md bg-neutral-900 px-2 py-0.5 ring-1 ring-neutral-800",
+            "whitespace-nowrap flex-none",
+            i === 1 ? "max-w-[8rem] truncate" : "",
+          ].join(" ")}
+        >
+          {g}
+        </span>
+      ))}
+      {hidden.length > 0 && (
+        <span
+          className="rounded-md bg-neutral-900 px-2 py-0.5 ring-1 ring-neutral-800 cursor-help whitespace-nowrap flex-none"
+          title={genres.join(", ")}
+        >
+          +{hidden.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function ListPage() {
   type YearFilter = "all" | "2020s" | "2010s" | "2000s" | "1990s" | "older";
   const [items, setItems] = useState<ListItem[]>([]);
@@ -341,21 +373,9 @@ export default function ListPage() {
               <div className="text-sm text-neutral-400">{m.year ?? "—"}</div>
               {/* Türler + puanlar */}
               <div className="mt-1 flex items-center gap-2 text-xs text-neutral-400">
-                {/* Tür rozetleri */}
-                <div className="flex-1 min-w-0 flex flex-wrap gap-1">
-                  {(details[m.tmdb_id]?.genres ?? []).slice(0, 2).map((g) => (
-                    <span
-                      key={g}
-                      title={g}
-                      className="max-w-[9rem] truncate rounded-md bg-neutral-900 px-2 py-0.5 ring-1 ring-neutral-800"
-                    >
-                      {g}
-                    </span>
-                  ))}
-                </div>
-
                 {/* Puan rozetleri */}
-                <div className="flex-shrink-0 flex items-center gap-1">
+                {/* PUANLAR */}
+                <div className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
                   <span className="badge whitespace-nowrap flex-none">
                     <span className="ico">⭐</span>
                     {typeof details[m.tmdb_id]?.imdb === "number"
@@ -363,7 +383,6 @@ export default function ListPage() {
                       : "—"}
                     <span className="opacity-70 ml-1">IMDb</span>
                   </span>
-
                   <span className="badge whitespace-nowrap flex-none">
                     <span className="ico">🍅</span>
                     {typeof details[m.tmdb_id]?.rt === "number"
@@ -372,7 +391,10 @@ export default function ListPage() {
                   </span>
                 </div>
               </div>
-
+              {/* TÜRLER */}
+              <div className="mt-1 text-xs text-neutral-400">
+                <GenresChips genres={details[m.tmdb_id]?.genres ?? []} />
+              </div>
               {/* İlk 3 oyuncu */}
               {(details[m.tmdb_id]?.cast?.length ?? 0) > 0 && (
                 <div className="mt-1 line-clamp-1 text-xs text-neutral-400">

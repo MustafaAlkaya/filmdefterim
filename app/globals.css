@@ -22,14 +22,14 @@ body {
 
 .badge {
   @apply inline-flex items-center gap-1 rounded-md bg-neutral-900 px-2 py-0.5 ring-1 ring-neutral-800;
-  line-height: 1; /* metrikleri sıkı tutar */
-  height: 22px; /* sabit yükseklik */
-  font-size: 12px; /* okunur, kompakt */
+  line-height: 1;
+  height: 22px;
+  font-size: 12px;
 }
 .badge .ico {
-  @apply inline-block;
   width: 14px;
   height: 14px;
+  display: inline-block;
 }
 
 :root {
