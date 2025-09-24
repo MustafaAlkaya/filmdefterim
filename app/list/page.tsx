@@ -41,14 +41,13 @@ export default function ListPage() {
   type YearFilter = "all" | "2020s" | "2010s" | "2000s" | "1990s" | "older";
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortKey, setSortKey] = useState<"year" | "title">("year");
   const [loggedIn, setLoggedIn] = useState(false);
   const [query, setQuery] = useState("");
   const [yearFilter, setYearFilter] = useState<YearFilter>("all");
   const [removing, setRemoving] = useState<Set<number>>(new Set());
   type Details = {
     genres: string[];
-    rating: number | null; // TMDb puanı (istersen kullanmaya devam)
+    rating: number | null; // TMDb puanı
     imdb?: number | null; // IMDb
     rt?: number | null; // Rotten Tomatoes (%)
     cast?: string[]; // ilk 3 oyuncu
@@ -86,6 +85,7 @@ export default function ListPage() {
       }
     })();
   }, []);
+
   async function removeFromList(id: number) {
     if (!loggedIn) return;
     setRemoving((s) => new Set(s).add(id));
@@ -131,6 +131,7 @@ export default function ListPage() {
     }
     load();
   }, []);
+
   useEffect(() => {
     const missing = items
       .map((m) => m.tmdb_id)
@@ -200,30 +201,20 @@ export default function ListPage() {
     return gs.includes(genreFilter);
   }
 
+  // 🔸 Sadece filtre uygula; SIRALAMA YAPMA.
+  // Backend (/api/list) IMDb'ye göre sıralı döndürüyor; buradaki sırayı bozmayalım.
   const filtered = items.filter(
     (m) =>
       (!query.trim() ||
         (m.title || "").toLowerCase().includes(query.trim().toLowerCase())) &&
       inRange(m.year ?? null) &&
-      matchesGenre(m.tmdb_id) // <-- tür filtresi
+      matchesGenre(m.tmdb_id)
   );
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortKey === "year") {
-      const ay = a.year ?? 0,
-        by = b.year ?? 0;
-      return by - ay;
-    }
-    return (a.title || "").localeCompare(b.title || "", "tr", {
-      sensitivity: "base",
-    });
-  });
   function clearFilters() {
     setQuery("");
     setYearFilter("all");
     setGenreFilter("all");
-    // İstersen sıralamayı da sıfırlayabilirsin:
-    // setSortKey("year");
   }
 
   return (
@@ -231,7 +222,7 @@ export default function ListPage() {
       <h1 className="text-2xl font-extrabold tracking-tight text-orange-500">
         {"Mustafa'nın Listesi"}
       </h1>
-      {/* === FILTER BADGES (aktif filtre rozetleri) — START === */}
+
       {(query.trim() || yearFilter !== "all" || genreFilter !== "all") && (
         <div className="mb-2 mt-1 flex flex-wrap items-center gap-2 text-xs">
           {query.trim() && (
@@ -287,18 +278,10 @@ export default function ListPage() {
           )}
         </div>
       )}
-      {/* === FILTER BADGES — END === */}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <label className="text-sm text-neutral-400">Sırala:</label>
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as "year" | "title")}
-            className="rounded-md bg-neutral-900 px-3 py-2 ring-1 ring-neutral-800 focus:outline-none"
-          >
-            <option value="year">Yıla göre (yeni → eski)</option>
-            <option value="title">Başlığa göre (A→Z)</option>
-          </select>
+          {/* Sırala dropdown'u kaldırıldı; backend sırası kullanılacak */}
           {/* Tür seçici */}
           <select
             value={genreFilter}
@@ -353,7 +336,7 @@ export default function ListPage() {
       {loading && <div>Yükleniyor...</div>}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-        {sorted.map((m) => (
+        {filtered.map((m) => (
           <div
             key={m.tmdb_id}
             className="card overflow-hidden group transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/30"
@@ -371,25 +354,21 @@ export default function ListPage() {
             <div className="p-3">
               <div className="line-clamp-2 font-semibold">{m.title}</div>
               <div className="text-sm text-neutral-400">{m.year ?? "—"}</div>
-              {/* Türler + puanlar */}
-              <div className="mt-1 flex items-center gap-2 text-xs text-neutral-400">
-                {/* Puan rozetleri */}
-                {/* PUANLAR */}
-                <div className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
-                  <span className="badge whitespace-nowrap flex-none">
-                    <span className="ico">⭐</span>
-                    {typeof details[m.tmdb_id]?.imdb === "number"
-                      ? details[m.tmdb_id]!.imdb!.toFixed(1)
-                      : "—"}
-                    <span className="opacity-70 ml-1">IMDb</span>
-                  </span>
-                  <span className="badge whitespace-nowrap flex-none">
-                    <span className="ico">🍅</span>
-                    {typeof details[m.tmdb_id]?.rt === "number"
-                      ? `${details[m.tmdb_id]!.rt!}%`
-                      : "—"}
-                  </span>
-                </div>
+              {/* PUANLAR */}
+              <div className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
+                <span className="badge whitespace-nowrap flex-none">
+                  <span className="ico">⭐</span>
+                  {typeof details[m.tmdb_id]?.imdb === "number"
+                    ? details[m.tmdb_id]!.imdb!.toFixed(1)
+                    : "—"}
+                  <span className="opacity-70 ml-1">IMDb</span>
+                </span>
+                <span className="badge whitespace-nowrap flex-none">
+                  <span className="ico">🍅</span>
+                  {typeof details[m.tmdb_id]?.rt === "number"
+                    ? `${details[m.tmdb_id]!.rt!}%`
+                    : "—"}
+                </span>
               </div>
               {/* TÜRLER */}
               <div className="mt-1 text-xs text-neutral-400">
