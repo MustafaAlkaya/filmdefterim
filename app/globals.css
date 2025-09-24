@@ -1,3 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Koyu tema + turuncu accent */
+:root {
+  color-scheme: dark;
+}
+body {
+  background-color: #0a0a0a;
+  color: #e5e5e5;
+}
+.btn {
+  @apply inline-flex items-center gap-2 rounded-lg px-4 py-2 font-medium transition;
+}
+.btn-primary {
+  @apply btn bg-orange-600 hover:bg-orange-500;
+}
+.card {
+  @apply rounded-2xl bg-neutral-900/70 shadow-xl;
+}
+
+.badge {
+  @apply inline-flex items-center gap-1 rounded-md bg-neutral-900 px-2 py-0.5 ring-1 ring-neutral-800;
+  line-height: 1; /* metrikleri sıkı tutar */
+  height: 22px; /* sabit yükseklik */
+  font-size: 12px; /* okunur, kompakt */
+}
+.badge .ico {
+  @apply inline-block;
+  width: 14px;
+  height: 14px;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -39,4 +73,9 @@ a {
   html {
     color-scheme: dark;
   }
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
