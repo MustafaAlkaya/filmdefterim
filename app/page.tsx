@@ -1,11 +1,9 @@
 "use client";
-import { Suspense, useEffect, useState, type ChangeEvent } from "react";
+import { Suspense, useEffect, useState, type ChangeEvent, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Movie } from "@/types/movie";
 import { toast } from "@/lib/toast";
-import { useRef } from "react"; // varsa tekrar ekleme
 import SkeletonCard from "@/app/_components/SkeletonCard";
-// ... component içinde:
 
 // İlk 2 türü tam göster, kalanı +N; ilk tür asla kaybolmaz
 function GenresChips({ genres }: { genres: string[] }) {
@@ -39,16 +37,19 @@ function GenresChips({ genres }: { genres: string[] }) {
   );
 }
 
+type Ratings = { imdb: number | null; rt: number | null };
+
 function HomePageInner() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<Movie[]>([]);
+  const [results, setResults] = useState<
+    (Movie & { imdb?: number | null; rt?: number | null })[]
+  >([]);
   const [loggedIn, setLoggedIn] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [listed, setListed] = useState<Set<number>>(new Set());
   const [genreMap, setGenreMap] = useState<Record<number, string>>({});
-  type Ratings = { imdb: number | null; rt: number | null };
   const [ratings, setRatings] = useState<Record<number, Ratings>>({});
   const [casts, setCasts] = useState<Record<number, string[]>>({});
   const typingTimer = useRef<NodeJS.Timeout | null>(null);
@@ -59,40 +60,52 @@ function HomePageInner() {
     if (!results || results.length === 0) return;
 
     (async () => {
-      // çok sayıda istek olmaması için ilk 12 sonuçla sınırladık
-      const missing = results
-        .filter((m) => ratings[m.id] === undefined || casts[m.id] === undefined)
-        .slice(0, 12);
-
-      if (missing.length === 0) return;
+      const need: number[] = [];
+      for (const m of results) {
+        const haveRatings =
+          ratings[m.id] !== undefined ||
+          typeof m.imdb === "number" ||
+          typeof m.rt === "number";
+        const haveCast = casts[m.id] !== undefined;
+        if (!haveRatings || !haveCast) need.push(m.id);
+      }
+      if (need.length === 0) return;
 
       const pairs = await Promise.all(
-        missing.map(async (m) => {
+        need.slice(0, 12).map(async (id) => {
+          const needR =
+            ratings[id] === undefined &&
+            typeof results.find((r) => r.id === id)?.imdb !== "number";
+          const needC = casts[id] === undefined;
           const [r1, r2] = await Promise.all([
-            fetch(`/api/ratings?id=${m.id}`, { cache: "no-store" })
-              .then((r) => r.json())
-              .catch(() => ({ imdb: null, rt: null })),
-            fetch(`/api/credits?id=${m.id}`, { cache: "no-store" })
-              .then((r) => r.json())
-              .catch(() => ({ cast: [] })),
+            needR
+              ? fetch(`/api/ratings?id=${id}`, { cache: "no-store" })
+                  .then((r) => r.json())
+                  .catch(() => ({ imdb: null, rt: null }))
+              : null,
+            needC
+              ? fetch(`/api/credits?id=${id}`, { cache: "no-store" })
+                  .then((r) => r.json())
+                  .catch(() => ({ cast: [] }))
+              : null,
           ]);
-          return {
-            id: m.id,
-            ratings: r1 as Ratings,
-            cast: (r2.cast as string[]) ?? [],
-          };
+          return { id, r1, r2 };
         })
       );
 
       setRatings((prev) => {
         const next = { ...prev };
-        for (const p of pairs) next[p.id] = p.ratings;
+        for (const { id, r1 } of pairs) {
+          if (r1) next[id] = { imdb: r1.imdb ?? null, rt: r1.rt ?? null };
+        }
         return next;
       });
 
       setCasts((prev) => {
         const next = { ...prev };
-        for (const p of pairs) next[p.id] = p.cast;
+        for (const { id, r2 } of pairs) {
+          if (r2) next[id] = (r2.cast as string[]) ?? [];
+        }
         return next;
       });
     })();
@@ -142,20 +155,37 @@ function HomePageInner() {
       }
     })();
   }, []);
-  async function search(arg?: string | React.MouseEvent<HTMLButtonElement>) {
-    // Eğer argüman string ise onu kullan, değilse q state’ini kullan
-    const query = typeof arg === "string" ? arg.trim() : q.trim();
 
+  async function search(arg?: string | React.MouseEvent<HTMLButtonElement>) {
+    const query = typeof arg === "string" ? arg.trim() : q.trim();
     if (!query) {
       setResults([]);
+      setRatings({});
+      setCasts({});
       return;
     }
 
     setLoading(true);
     try {
+      // Yeni arama başlamadan önce eski detay state'lerini temizle
+      setRatings({});
+      setCasts({});
+
       const r = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const d = await r.json();
-      setResults(d.results || []);
+
+      const arr: (Movie & { imdb?: number | null; rt?: number | null })[] =
+        d.results || [];
+      setResults(arr);
+
+      // API'den gelen imdb/rt değerlerini tohum olarak state'e yaz
+      const seed: Record<number, Ratings> = {};
+      for (const m of arr) {
+        const imdb = typeof m.imdb === "number" ? m.imdb : null;
+        const rt = typeof m.rt === "number" ? m.rt : null;
+        if (imdb !== null || rt !== null) seed[m.id] = { imdb, rt };
+      }
+      setRatings(seed);
     } finally {
       setLoading(false);
     }
@@ -169,7 +199,7 @@ function HomePageInner() {
     }, DEBOUNCE_DELAY);
   }
 
-  // sayfa kapanırken timer temizle (opsiyonel ama iyi)
+  // sayfa kapanırken timer temizle
   useEffect(() => {
     return () => {
       if (typingTimer.current) clearTimeout(typingTimer.current);
@@ -202,6 +232,8 @@ function HomePageInner() {
     if (searchParams.get("reset") === "1") {
       setQ("");
       setResults([]);
+      setRatings({});
+      setCasts({});
       router.replace("/");
     }
   }, [searchParams, router]);
@@ -214,13 +246,12 @@ function HomePageInner() {
           onChange={(e) => {
             const value = e.target.value;
             setQ(value);
-            scheduleSearch(value); // 👈 yazdıkça 300ms bekleyip search çalışır
+            scheduleSearch(value);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              // Enter’a basınca beklemeden hemen ara
               if (typingTimer.current) clearTimeout(typingTimer.current);
-              search(); // q state’ini kullanır
+              search();
             }
           }}
           placeholder="Film ara..."
@@ -256,87 +287,91 @@ function HomePageInner() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
         {loading
           ? Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
-          : results.map((m: Movie) => (
-              <div
-                key={m.id}
-                className="card overflow-hidden group transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/30"
-              >
-                <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-neutral-900">
-                  {m.poster_path ? (
-                    <img
-                      src={`https://image.tmdb.org/t/p/w342${m.poster_path}`}
-                      alt={m.title}
-                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 grid place-items-center text-neutral-600 text-sm">
-                      Poster yok
-                    </div>
-                  )}
-                </div>
+          : results.map((m) => {
+              const imdbVal =
+                typeof m.imdb === "number"
+                  ? m.imdb
+                  : ratings[m.id]?.imdb ?? null;
+              const rtVal =
+                typeof m.rt === "number" ? m.rt : ratings[m.id]?.rt ?? null;
 
-                <div className="p-3">
-                  <div className="line-clamp-2 font-semibold">{m.title}</div>
-                  <div className="text-sm text-neutral-400">
-                    {m.release_date?.slice(0, 4) || "—"}
+              return (
+                <div
+                  key={m.id}
+                  className="card overflow-hidden group transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/30"
+                >
+                  <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-neutral-900">
+                    {m.poster_path ? (
+                      <img
+                        src={`https://image.tmdb.org/t/p/w342${m.poster_path}`}
+                        alt={m.title}
+                        className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 grid place-items-center text-neutral-600 text-sm">
+                        Poster yok
+                      </div>
+                    )}
                   </div>
 
-                  {/* Türler + puanlar */}
-                  <div className="mt-1 flex items-center gap-2 text-xs text-neutral-400">
-                    {/* Puan rozetleri */}
+                  <div className="p-3">
+                    <div className="line-clamp-2 font-semibold">{m.title}</div>
+                    <div className="text-sm text-neutral-400">
+                      {m.release_date?.slice(0, 4) || "—"}
+                    </div>
+
                     {/* PUANLAR */}
                     <div className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
                       <span className="badge whitespace-nowrap flex-none">
                         <span className="ico">⭐</span>
-                        {typeof ratings[m.id]?.imdb === "number"
-                          ? ratings[m.id]!.imdb!.toFixed(1)
-                          : "—"}
+                        {typeof imdbVal === "number" ? imdbVal.toFixed(1) : "—"}
                         <span className="opacity-70 ml-1">IMDb</span>
                       </span>
                       <span className="badge whitespace-nowrap flex-none">
                         <span className="ico">🍅</span>
-                        {typeof ratings[m.id]?.rt === "number"
-                          ? `${ratings[m.id]!.rt!}%`
-                          : "—"}
+                        {typeof rtVal === "number" ? `${rtVal}%` : "—"}
                       </span>
                     </div>
-                  </div>
-                  {/* TÜRLER */}
-                  <div className="mt-1 text-xs text-neutral-400">
-                    <GenresChips
-                      genres={(m.genre_ids ?? [])
-                        .map((id) => genreMap[id])
-                        .filter(Boolean)}
-                    />
-                  </div>
-                  {/* İlk 3 oyuncu */}
-                  {(casts[m.id]?.length ?? 0) > 0 && (
-                    <div className="mt-1 line-clamp-1 text-xs text-neutral-400">
-                      {(casts[m.id] || []).slice(0, 3).join(", ")}
-                    </div>
-                  )}
 
-                  {loggedIn &&
-                    (listed.has(m.id) ? (
-                      <button className="mt-2 btn w-full bg-neutral-800 opacity-60 cursor-not-allowed">
-                        Zaten listede
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => addToList(m)}
-                        className="mt-2 btn-primary w-full"
-                      >
-                        Listeye Ekle
-                      </button>
-                    ))}
+                    {/* TÜRLER */}
+                    <div className="mt-1 text-xs text-neutral-400">
+                      <GenresChips
+                        genres={(m.genre_ids ?? [])
+                          .map((id) => genreMap[id])
+                          .filter(Boolean)}
+                      />
+                    </div>
+
+                    {/* İlk 3 oyuncu */}
+                    {(casts[m.id]?.length ?? 0) > 0 && (
+                      <div className="mt-1 line-clamp-1 text-xs text-neutral-400">
+                        {(casts[m.id] || []).slice(0, 3).join(", ")}
+                      </div>
+                    )}
+
+                    {loggedIn &&
+                      (listed.has(m.id) ? (
+                        <button className="mt-2 btn w-full bg-neutral-800 opacity-60 cursor-not-allowed">
+                          Zaten listede
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => addToList(m)}
+                          className="mt-2 btn-primary w-full"
+                        >
+                          Listeye Ekle
+                        </button>
+                      ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
       </div>
     </div>
   );
 }
+
 export default function Page() {
   return (
     <Suspense fallback={<div />}>
@@ -344,5 +379,3 @@ export default function Page() {
     </Suspense>
   );
 }
-
-//Deneme github

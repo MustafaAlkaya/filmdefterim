@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureTable, fetchList, addItem, removeItem } from "@/lib/db";
 import { isAdmin } from "@/lib/auth";
-import { getIMDbRating } from "@/lib/ratings";
+import { getRatings } from "@/lib/ratings";
 
 type AddItemBody = {
   tmdb_id: number;
@@ -48,7 +48,7 @@ export async function GET() {
 
     // IMDb puanlarını sınırlı eşzamanlılıkla topla (örn. 8)
     const withRatings = await mapWithConcurrency(rows, 8, async (row) => {
-      const imdb = await getIMDbRating(row.tmdb_id);
+      const { imdb } = await getRatings(row.tmdb_id);
       return { row, imdb };
     });
 
