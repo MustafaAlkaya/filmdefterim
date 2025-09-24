@@ -16,8 +16,9 @@ export async function POST(req: Request) {
   res.cookies.set("admin", "1", {
     httpOnly: true,
     sameSite: "lax",
-    secure: isProd, // prod’da secure, local’de değil
-    path: "/",
+    secure: isProd, // mevcut
+    path: "/", // mevcut
+    maxAge: 60 * 60 * 24 * 7, // 7 gün
   });
   return res;
 }

@@ -6,7 +6,7 @@ export async function POST() {
   res.cookies.set("admin", "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: isProd, // prod’da secure, local’de değil
+    secure: isProd,
     path: "/",
     maxAge: 0,
   });
