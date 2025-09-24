@@ -1,15 +1,16 @@
+// app/api/genres/route.ts
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const api = process.env.TMDB_API_KEY;
-  if (!api) return NextResponse.json({ map: {} });
+  const tmdb = process.env.TMDB_API_KEY;
+  if (!tmdb) return NextResponse.json({ genres: [] });
 
-  const r = await fetch(
-    `https://api.themoviedb.org/3/genre/movie/list?api_key=${api}&language=tr-TR`,
-    { next: { revalidate: 60 * 60 * 24 } } // 24s cache
-  );
+  const url = `https://api.themoviedb.org/3/genre/movie/list?api_key=${tmdb}&language=tr-TR`;
+
+  // Burada revalidate ekledik (1 gün)
+  const r = await fetch(url, { next: { revalidate: 86400 } });
+  if (!r.ok) return NextResponse.json({ genres: [] });
+
   const data = await r.json();
-  const map: Record<number, string> = {};
-  for (const g of data.genres ?? []) map[g.id] = g.name;
-  return NextResponse.json({ map });
+  return NextResponse.json(data);
 }

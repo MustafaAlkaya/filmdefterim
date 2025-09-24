@@ -2,6 +2,7 @@
 import { sql } from "@vercel/postgres";
 
 export async function ensureTable() {
+  // 1) Tabloyu oluştur
   await sql/*sql*/ `
     CREATE TABLE IF NOT EXISTS list_items (
       id SERIAL PRIMARY KEY,
@@ -13,6 +14,12 @@ export async function ensureTable() {
       added_by TEXT
     );
   `;
+
+  // 2) Performans için indeksler
+  // NOT: tmdb_id zaten UNIQUE index'e sahip.
+  await sql/*sql*/ `CREATE INDEX IF NOT EXISTS list_items_year_idx ON list_items(year);`;
+  await sql/*sql*/ `CREATE INDEX IF NOT EXISTS list_items_added_at_idx ON list_items(added_at);`;
+  await sql/*sql*/ `CREATE INDEX IF NOT EXISTS list_items_title_idx ON list_items(title);`;
 }
 
 export async function fetchList() {
