@@ -3,6 +3,9 @@ import { Suspense, useEffect, useState, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Movie } from "@/types/movie";
 import { toast } from "@/lib/toast";
+import { useRef } from "react"; // varsa tekrar ekleme
+import SkeletonCard from "@/app/_components/SkeletonCard";
+// ... component içinde:
 
 // İlk 2 türü tam göster, kalanı +N; ilk tür asla kaybolmaz
 function GenresChips({ genres }: { genres: string[] }) {
@@ -48,6 +51,8 @@ function HomePageInner() {
   type Ratings = { imdb: number | null; rt: number | null };
   const [ratings, setRatings] = useState<Record<number, Ratings>>({});
   const [casts, setCasts] = useState<Record<number, string[]>>({});
+  const typingTimer = useRef<NodeJS.Timeout | null>(null);
+  const DEBOUNCE_DELAY = 500; // ms
 
   // Sonuçlar değiştiğinde eksik IMDb/RT ve oyuncu bilgilerini getir
   useEffect(() => {
@@ -137,18 +142,39 @@ function HomePageInner() {
       }
     })();
   }, []);
+  async function search(arg?: string | React.MouseEvent<HTMLButtonElement>) {
+    // Eğer argüman string ise onu kullan, değilse q state’ini kullan
+    const query = typeof arg === "string" ? arg.trim() : q.trim();
 
-  async function search() {
-    if (!q.trim() || loading) return; // boşsa veya zaten arıyorsa dur
+    if (!query) {
+      setResults([]);
+      return;
+    }
+
     setLoading(true);
     try {
-      const r = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`);
-      const data = await r.json();
-      setResults(data.results || []);
+      const r = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const d = await r.json();
+      setResults(d.results || []);
     } finally {
       setLoading(false);
     }
   }
+
+  // debounce ile zamanlayarak çağıracağız
+  function scheduleSearch(value: string) {
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => {
+      search(value);
+    }, DEBOUNCE_DELAY);
+  }
+
+  // sayfa kapanırken timer temizle (opsiyonel ama iyi)
+  useEffect(() => {
+    return () => {
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    };
+  }, []);
 
   async function addToList(m: Movie) {
     const poster = m.poster_path
@@ -185,9 +211,17 @@ function HomePageInner() {
       <div className="flex gap-2">
         <input
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setQ(value);
+            scheduleSearch(value); // 👈 yazdıkça 300ms bekleyip search çalışır
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") search();
+            if (e.key === "Enter") {
+              // Enter’a basınca beklemeden hemen ara
+              if (typingTimer.current) clearTimeout(typingTimer.current);
+              search(); // q state’ini kullanır
+            }
           }}
           placeholder="Film ara..."
           className="w-full rounded-xl bg-neutral-900 px-4 py-3 outline-none ring-1 ring-neutral-800 focus:ring-orange-600"
@@ -220,83 +254,85 @@ function HomePageInner() {
       )}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-        {results.map((m: Movie) => (
-          <div
-            key={m.id}
-            className="card overflow-hidden group transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/30"
-          >
-            <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-neutral-900">
-              {m.poster_path ? (
-                <img
-                  src={`https://image.tmdb.org/t/p/w342${m.poster_path}`}
-                  alt={m.title}
-                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="absolute inset-0 grid place-items-center text-neutral-600 text-sm">
-                  Poster yok
+        {loading
+          ? Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
+          : results.map((m: Movie) => (
+              <div
+                key={m.id}
+                className="card overflow-hidden group transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/30"
+              >
+                <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-neutral-900">
+                  {m.poster_path ? (
+                    <img
+                      src={`https://image.tmdb.org/t/p/w342${m.poster_path}`}
+                      alt={m.title}
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 grid place-items-center text-neutral-600 text-sm">
+                      Poster yok
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="p-3">
-              <div className="line-clamp-2 font-semibold">{m.title}</div>
-              <div className="text-sm text-neutral-400">
-                {m.release_date?.slice(0, 4) || "—"}
-              </div>
+                <div className="p-3">
+                  <div className="line-clamp-2 font-semibold">{m.title}</div>
+                  <div className="text-sm text-neutral-400">
+                    {m.release_date?.slice(0, 4) || "—"}
+                  </div>
 
-              {/* Türler + puanlar */}
-              <div className="mt-1 flex items-center gap-2 text-xs text-neutral-400">
-                {/* Puan rozetleri */}
-                {/* PUANLAR */}
-                <div className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
-                  <span className="badge whitespace-nowrap flex-none">
-                    <span className="ico">⭐</span>
-                    {typeof ratings[m.id]?.imdb === "number"
-                      ? ratings[m.id]!.imdb!.toFixed(1)
-                      : "—"}
-                    <span className="opacity-70 ml-1">IMDb</span>
-                  </span>
-                  <span className="badge whitespace-nowrap flex-none">
-                    <span className="ico">🍅</span>
-                    {typeof ratings[m.id]?.rt === "number"
-                      ? `${ratings[m.id]!.rt!}%`
-                      : "—"}
-                  </span>
+                  {/* Türler + puanlar */}
+                  <div className="mt-1 flex items-center gap-2 text-xs text-neutral-400">
+                    {/* Puan rozetleri */}
+                    {/* PUANLAR */}
+                    <div className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
+                      <span className="badge whitespace-nowrap flex-none">
+                        <span className="ico">⭐</span>
+                        {typeof ratings[m.id]?.imdb === "number"
+                          ? ratings[m.id]!.imdb!.toFixed(1)
+                          : "—"}
+                        <span className="opacity-70 ml-1">IMDb</span>
+                      </span>
+                      <span className="badge whitespace-nowrap flex-none">
+                        <span className="ico">🍅</span>
+                        {typeof ratings[m.id]?.rt === "number"
+                          ? `${ratings[m.id]!.rt!}%`
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
+                  {/* TÜRLER */}
+                  <div className="mt-1 text-xs text-neutral-400">
+                    <GenresChips
+                      genres={(m.genre_ids ?? [])
+                        .map((id) => genreMap[id])
+                        .filter(Boolean)}
+                    />
+                  </div>
+                  {/* İlk 3 oyuncu */}
+                  {(casts[m.id]?.length ?? 0) > 0 && (
+                    <div className="mt-1 line-clamp-1 text-xs text-neutral-400">
+                      {(casts[m.id] || []).slice(0, 3).join(", ")}
+                    </div>
+                  )}
+
+                  {loggedIn &&
+                    (listed.has(m.id) ? (
+                      <button className="mt-2 btn w-full bg-neutral-800 opacity-60 cursor-not-allowed">
+                        Zaten listede
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => addToList(m)}
+                        className="mt-2 btn-primary w-full"
+                      >
+                        Listeye Ekle
+                      </button>
+                    ))}
                 </div>
               </div>
-              {/* TÜRLER */}
-              <div className="mt-1 text-xs text-neutral-400">
-                <GenresChips
-                  genres={(m.genre_ids ?? [])
-                    .map((id) => genreMap[id])
-                    .filter(Boolean)}
-                />
-              </div>
-              {/* İlk 3 oyuncu */}
-              {(casts[m.id]?.length ?? 0) > 0 && (
-                <div className="mt-1 line-clamp-1 text-xs text-neutral-400">
-                  {(casts[m.id] || []).slice(0, 3).join(", ")}
-                </div>
-              )}
-
-              {loggedIn &&
-                (listed.has(m.id) ? (
-                  <button className="mt-2 btn w-full bg-neutral-800 opacity-60 cursor-not-allowed">
-                    Zaten listede
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => addToList(m)}
-                    className="mt-2 btn-primary w-full"
-                  >
-                    Listeye Ekle
-                  </button>
-                ))}
-            </div>
-          </div>
-        ))}
+            ))}
       </div>
     </div>
   );
