@@ -2,6 +2,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
+import BackToSearch from "./BackToSearch";
+import AddToListButton from "./AddToListButton";
 
 type MovieInfo = {
   id: number;
@@ -196,15 +198,27 @@ export default async function MovieDetailPage({
 
           {/* Geri / Keşfet linkleri */}
           <div className="pt-2 flex gap-3">
-            <Link href="/" className="btn bg-neutral-800 hover:bg-neutral-700">
-              ← Aramaya dön
-            </Link>
+            <BackToSearch />
             <Link
               href="/discover"
               className="btn bg-neutral-800 hover:bg-neutral-700"
             >
               Keşfet&apos;e git
             </Link>
+            <AddToListButton
+              tmdb_id={info.id}
+              title={info.title}
+              year={
+                info.release_date
+                  ? Number(info.release_date.slice(0, 4))
+                  : undefined
+              }
+              poster_url={
+                info.poster_path
+                  ? `https://image.tmdb.org/t/p/w342${info.poster_path}`
+                  : null
+              }
+            />
           </div>
         </div>
       </div>

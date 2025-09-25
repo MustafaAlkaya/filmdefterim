@@ -136,6 +136,17 @@ function HomePageInner() {
   }
 
   useEffect(() => {
+    const qp = (searchParams.get("q") || "").trim();
+    if (qp) {
+      setQ(qp);
+      // URL'den gelen q ile sonuçları hemen getir
+      search(qp);
+    }
+    // sadece ilk mount'ta çalışsın
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     refreshAuthAndList(); // ilk yüklemede
 
     function onAuthChanged() {
@@ -159,7 +170,10 @@ function HomePageInner() {
 
   async function search(arg?: string | React.MouseEvent<HTMLButtonElement>) {
     const query = typeof arg === "string" ? arg.trim() : q.trim();
-    if (!query) {
+    if (query) {
+      router.replace(`/?q=${encodeURIComponent(query)}`);
+    } else {
+      router.replace(`/`);
       setResults([]);
       setRatings({});
       setCasts({});
@@ -175,8 +189,10 @@ function HomePageInner() {
       const r = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
       const d = await r.json();
 
-      const arr: (Movie & { imdb?: number | null; rt?: number | null })[] =
-        d.results || [];
+      const arr = (d.results || []) as (Movie & {
+        imdb?: number | null;
+        rt?: number | null;
+      })[];
       setResults(arr);
 
       // API'den gelen imdb/rt değerlerini tohum olarak state'e yaz
@@ -247,7 +263,7 @@ function HomePageInner() {
           onChange={(e) => {
             const value = e.target.value;
             setQ(value);
-            scheduleSearch(value);
+            scheduleSearch(value); // URL’i burada yazmıyoruz
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
