@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ListItem } from "@/types/list-item";
 import type { ChangeEvent } from "react";
 import { toast } from "@/lib/toast";
+import Link from "next/link";
 
 // İlk 2 türü tam göster, kalanı +N; ilk tür asla kaybolmaz
 function GenresChips({ genres }: { genres: string[] }) {
@@ -341,19 +342,27 @@ export default function ListPage() {
             key={m.tmdb_id}
             className="card overflow-hidden group transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/30"
           >
-            {m.poster_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={m.poster_url}
-                alt={m.title}
-                className="w-full transition-transform duration-300 group-hover:scale-105"
-              />
-            ) : (
-              <div className="h-52 bg-neutral-800" />
-            )}
+            <Link
+              href={`/movie/${m.tmdb_id}`}
+              className="block overflow-hidden rounded-2xl"
+              prefetch
+            >
+              {m.poster_url ? (
+                <img
+                  src={m.poster_url}
+                  alt={m.title}
+                  className="w-full transition-transform duration-300 group-hover:scale-105"
+                />
+              ) : (
+                <div className="h-52 bg-neutral-800" />
+              )}
+            </Link>
+
             <div className="p-3">
-              <div className="line-clamp-2 font-semibold">{m.title}</div>
-              <div className="text-sm text-neutral-400">{m.year ?? "—"}</div>
+              <Link href={`/movie/${m.tmdb_id}`} className="block" prefetch>
+                <div className="line-clamp-2 font-semibold">{m.title}</div>
+                <div className="text-sm text-neutral-400">{m.year ?? "—"}</div>
+              </Link>
               {/* PUANLAR */}
               <div className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
                 <span className="badge whitespace-nowrap flex-none">

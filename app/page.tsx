@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Movie } from "@/types/movie";
 import { toast } from "@/lib/toast";
 import SkeletonCard from "@/app/_components/SkeletonCard";
+import Link from "next/link";
 
 // İlk 2 türü tam göster, kalanı +N; ilk tür asla kaybolmaz
 function GenresChips({ genres }: { genres: string[] }) {
@@ -300,7 +301,11 @@ function HomePageInner() {
                   key={m.id}
                   className="card overflow-hidden group transition-transform duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/30"
                 >
-                  <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-neutral-900">
+                  <Link
+                    href={`/movie/${m.id}`}
+                    className="relative block aspect-[2/3] w-full overflow-hidden rounded-2xl bg-neutral-900"
+                    prefetch
+                  >
                     {m.poster_path ? (
                       <img
                         src={`https://image.tmdb.org/t/p/w342${m.poster_path}`}
@@ -313,13 +318,17 @@ function HomePageInner() {
                         Poster yok
                       </div>
                     )}
-                  </div>
+                  </Link>
 
                   <div className="p-3">
-                    <div className="line-clamp-2 font-semibold">{m.title}</div>
-                    <div className="text-sm text-neutral-400">
-                      {m.release_date?.slice(0, 4) || "—"}
-                    </div>
+                    <Link href={`/movie/${m.id}`} className="block" prefetch>
+                      <div className="line-clamp-2 font-semibold">
+                        {m.title}
+                      </div>
+                      <div className="text-sm text-neutral-400">
+                        {m.release_date?.slice(0, 4) || "—"}
+                      </div>
+                    </Link>
 
                     {/* PUANLAR */}
                     <div className="mt-1 flex items-center gap-1 text-xs text-neutral-400">

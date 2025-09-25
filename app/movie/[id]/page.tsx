@@ -14,6 +14,12 @@ type MovieInfo = {
   rating?: number | null; // TMDb ort.
 };
 
+type VideoItem = {
+  site: string;
+  type: string;
+  key: string;
+};
+
 type Ratings = { imdb: number | null; rt: number | null };
 
 // ---- helpers ----
@@ -31,16 +37,29 @@ async function getJSON<T>(url: string, revalidate: number) {
 }
 
 async function fetchMovie(base: string, id: string) {
-  const [info, ratings, credits] = await Promise.all([
+  const [info, ratings, credits, videos] = await Promise.all([
     getJSON<MovieInfo>(`${base}/api/movie?id=${id}`, 86400), // 1 gün
     getJSON<Ratings>(`${base}/api/ratings?id=${id}`, 21600), // 6 saat
     getJSON<{ cast: string[] }>(`${base}/api/credits?id=${id}`, 21600),
+    fetch(
+      `https://api.themoviedb.org/3/movie/${id}/videos?api_key=${process.env.TMDB_API_KEY}&language=tr-TR`,
+      { next: { revalidate: 21600 } }
+    )
+      .then((r) => (r.ok ? r.json() : { results: [] }))
+      .catch(() => ({ results: [] })),
   ]);
+
+  const videoKey =
+    (videos.results || []).find(
+      (v: VideoItem) =>
+        v.site === "YouTube" && (v.type === "Trailer" || v.type === "Teaser")
+    )?.key || null;
 
   return {
     info,
     ratings,
     cast: credits.cast?.slice(0, 10) ?? [],
+    videoKey,
   };
 }
 
@@ -93,7 +112,7 @@ export default async function MovieDetailPage({
   params: { id: string };
 }) {
   const base = await getBaseUrlFromHeaders();
-  const { info, ratings, cast } = await fetchMovie(base, params.id);
+  const { info, ratings, cast, videoKey } = await fetchMovie(base, params.id);
 
   const year = info.release_date?.slice(0, 4) ?? "—";
   const genres = info.genres ?? [];
@@ -189,6 +208,19 @@ export default async function MovieDetailPage({
           </div>
         </div>
       </div>
+      {videoKey && (
+        <div className="mt-6 space-y-2">
+          <h2 className="text-lg font-semibold text-orange-500">Fragman</h2>
+          <div className="aspect-video w-full overflow-hidden rounded-xl ring-1 ring-neutral-800">
+            <iframe
+              src={`https://www.youtube.com/embed/${videoKey}`}
+              title="YouTube trailer"
+              allowFullScreen
+              className="h-full w-full"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Backdrop (varsa) */}
       {backdrop && (
