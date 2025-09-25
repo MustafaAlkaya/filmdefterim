@@ -1,29 +1,56 @@
+// app/api/movie/route.ts
 import { NextResponse } from "next/server";
 
-type TMDBMovie = {
+type TMDbGenre = { id: number; name: string };
+type TMDbMovie = {
   id: number;
-  genres?: { id: number; name: string }[];
-  vote_average?: number;
+  title: string;
+  overview?: string | null;
+  poster_path?: string | null;
+  backdrop_path?: string | null;
+  release_date?: string | null;
+  vote_average?: number | null;
+  genres?: TMDbGenre[];
 };
 
 export async function GET(req: Request) {
-  const id = new URL(req.url).searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "id gerekli" }, { status: 400 });
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
 
-  const api = process.env.TMDB_API_KEY;
-  if (!api) return NextResponse.json({ error: "api key yok" }, { status: 500 });
+  if (!id) {
+    return NextResponse.json({ error: "id gerekli" }, { status: 400 });
+  }
 
-  const r = await fetch(
-    `https://api.themoviedb.org/3/movie/${id}?api_key=${api}&language=tr-TR`,
-    { cache: "no-store" }
-  );
-  if (!r.ok) return NextResponse.json({ error: "TMDb hata" }, { status: 502 });
+  const key = process.env.TMDB_API_KEY;
+  if (!key) {
+    return NextResponse.json({ error: "TMDB_API_KEY yok" }, { status: 500 });
+  }
 
-  const d = (await r.json()) as TMDBMovie;
+  try {
+    // Detayları TR dilinde al
+    const url = `https://api.themoviedb.org/3/movie/${id}?api_key=${key}&language=tr-TR`;
+    const res = await fetch(url, { next: { revalidate: 86400 } }); // 1 gün
+    if (!res.ok) {
+      return NextResponse.json({ error: "TMDb hata" }, { status: res.status });
+    }
 
-  return NextResponse.json({
-    id: d.id,
-    genres: (d.genres ?? []).map((g) => g.name),
-    rating: typeof d.vote_average === "number" ? d.vote_average : null,
-  });
+    const m = (await res.json()) as TMDbMovie;
+
+    // İsim listesini çıkar
+    const genres = (m.genres ?? []).map((g) => g.name);
+
+    return NextResponse.json({
+      id: m.id,
+      title: m.title,
+      overview: m.overview ?? null,
+      poster_path: m.poster_path ?? null,
+      backdrop_path: m.backdrop_path ?? null,
+      release_date: m.release_date ?? null,
+      rating: typeof m.vote_average === "number" ? m.vote_average : null,
+      genres,
+    });
+  } catch (e) {
+    console.error("movie GET error:", e);
+    return NextResponse.json({ error: "Sunucu hatası" }, { status: 500 });
+  }
 }

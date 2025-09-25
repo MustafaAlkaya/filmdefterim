@@ -48,6 +48,9 @@ export default function RootLayout({
               <Link href="/" className="hover:underline">
                 Film Arama
               </Link>
+              <Link href="/discover" className="hover:underline">
+                Keşfet
+              </Link>
               <Link href="/list" className="hover:underline">
                 Favori Listesi
               </Link>
