@@ -16,17 +16,23 @@ type MovieInfo = {
   rating?: number | null; // TMDb ort.
 };
 
+type Ratings = { imdb: number | null; rt: number | null };
+
 type VideoItem = {
   site: string;
   type: string;
   key: string;
 };
+type VideosResponse = { results: VideoItem[] };
 
-type Ratings = { imdb: number | null; rt: number | null };
+// Bazı Next sürümlerinde params Promise gelebiliyor
+type MaybePromise<T> = T | Promise<T>;
 
-// ---- helpers ----
+/* --------------------------------- helpers -------------------------------- */
+
 async function getBaseUrlFromHeaders() {
-  const h = await headers(); // senkron
+  // headers() bazı ortamlarda sync döner; Promise.resolve ile her iki hali destekliyoruz
+  const h = await Promise.resolve(headers());
   const proto = h.get("x-forwarded-proto") ?? "http";
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   return `${proto}://${host}`;
@@ -47,15 +53,18 @@ async function fetchMovie(base: string, id: string) {
       `https://api.themoviedb.org/3/movie/${id}/videos?api_key=${process.env.TMDB_API_KEY}&language=tr-TR`,
       { next: { revalidate: 21600 } }
     )
-      .then((r) => (r.ok ? r.json() : { results: [] }))
-      .catch(() => ({ results: [] })),
+      .then(
+        async (r): Promise<VideosResponse> =>
+          r.ok ? ((await r.json()) as VideosResponse) : { results: [] }
+      )
+      .catch<VideosResponse>(() => ({ results: [] })),
   ]);
 
   const videoKey =
     (videos.results || []).find(
       (v: VideoItem) =>
         v.site === "YouTube" && (v.type === "Trailer" || v.type === "Teaser")
-    )?.key || null;
+    )?.key ?? null;
 
   return {
     info,
@@ -65,18 +74,19 @@ async function fetchMovie(base: string, id: string) {
   };
 }
 
-// ---- metadata ----
+/* -------------------------------- metadata -------------------------------- */
+
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string };
+  params: MaybePromise<{ id: string }>;
 }): Promise<Metadata> {
   try {
+    // params hem Promise hem de normal obje olabilir
+    const { id } = await Promise.resolve(params);
+
     const base = await getBaseUrlFromHeaders();
-    const info = await getJSON<MovieInfo>(
-      `${base}/api/movie?id=${params.id}`,
-      86400
-    );
+    const info = await getJSON<MovieInfo>(`${base}/api/movie?id=${id}`, 86400);
 
     const title = info.title || "Film";
     const year = info.release_date?.slice(0, 4) || "";
@@ -107,14 +117,17 @@ export async function generateMetadata({
   }
 }
 
-// ---- page ----
+/* ---------------------------------- page ---------------------------------- */
+
 export default async function MovieDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: MaybePromise<{ id: string }>;
 }) {
+  const { id } = await Promise.resolve(params);
+
   const base = await getBaseUrlFromHeaders();
-  const { info, ratings, cast, videoKey } = await fetchMovie(base, params.id);
+  const { info, ratings, cast, videoKey } = await fetchMovie(base, id);
 
   const year = info.release_date?.slice(0, 4) ?? "—";
   const genres = info.genres ?? [];
@@ -196,7 +209,7 @@ export default async function MovieDetailPage({
             </div>
           )}
 
-          {/* Geri / Keşfet linkleri */}
+          {/* Geri / Keşfet / Listeye Ekle */}
           <div className="pt-2 flex gap-3">
             <BackToSearch />
             <Link
@@ -222,6 +235,8 @@ export default async function MovieDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Fragman (varsa) */}
       {videoKey && (
         <div className="mt-6 space-y-2">
           <h2 className="text-lg font-semibold text-orange-500">Fragman</h2>
