@@ -31,7 +31,6 @@ type MaybePromise<T> = T | Promise<T>;
 /* --------------------------------- helpers -------------------------------- */
 
 async function getBaseUrlFromHeaders() {
-  // headers() bazı ortamlarda sync döner; Promise.resolve ile her iki hali destekliyoruz
   const h = await Promise.resolve(headers());
   const proto = h.get("x-forwarded-proto") ?? "http";
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
@@ -79,11 +78,11 @@ async function fetchMovie(base: string, id: string) {
 export async function generateMetadata({
   params,
 }: {
-  params: MaybePromise<{ id: string }>;
+  params?: Promise<{ id: string }>;
 }): Promise<Metadata> {
   try {
     // params hem Promise hem de normal obje olabilir
-    const { id } = await Promise.resolve(params);
+    const { id } = await params!;
 
     const base = await getBaseUrlFromHeaders();
     const info = await getJSON<MovieInfo>(`${base}/api/movie?id=${id}`, 86400);
@@ -122,9 +121,9 @@ export async function generateMetadata({
 export default async function MovieDetailPage({
   params,
 }: {
-  params: MaybePromise<{ id: string }>;
+  params?: Promise<{ id: string }>;
 }) {
-  const { id } = await Promise.resolve(params);
+  const { id } = await params!;
 
   const base = await getBaseUrlFromHeaders();
   const { info, ratings, cast, videoKey } = await fetchMovie(base, id);
